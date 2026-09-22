@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orais Academy</title>
+<meta name="theme-color" content="#4F8E90">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Orais Academy">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#fff;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+  #app{border:0;width:100%;height:100%;display:block}
+  #splash{position:fixed;inset:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9;transition:opacity .4s}
+  #splash img{width:96px;height:96px}
+  #splash p{color:#4F8E90;font-weight:600;letter-spacing:.12em;font-size:13px;margin:0}
+  .dot{width:34px;height:34px;border:3px solid #DBE8E8;border-top-color:#4F8E90;border-radius:50%;animation:g .8s linear infinite}
+  @keyframes g{to{transform:rotate(360deg)}}
+  #instBar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:#2F5556;color:#fff;border-radius:14px;padding:12px 14px;display:none;align-items:center;gap:12px;z-index:10;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  #instBar span{flex:1;font-size:13.5px;line-height:1.35}
+  #instBar button{background:#4F8E90;color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px}
+  #instBar .x{background:transparent;padding:6px;opacity:.7;font-size:16px}
+</style>
+</head>
+<body>
+<div id="splash"><img src="icon-192.png" alt=""><div class="dot"></div><p>ORAIS&nbsp;ACADEMY</p></div>
+
+<!-- URL do app no Apps Script (a query string ?ref é repassada automaticamente) -->
+<iframe id="app" allow="camera; clipboard-write" referrerpolicy="no-referrer"></iframe>
+
+<div id="instBar">
+  <span><b>Instale o app</b> na tela inicial para acessar com um toque.</span>
+  <button id="instGo">Instalar</button>
+  <button class="x" id="instX">✕</button>
+</div>
+
+<script>
+var APP_URL = 'https://script.google.com/macros/s/AKfycbwAAa2pzbQQ01NrGDacx0mQLX-EfYh94ttDhTSwozbkMdCuLhkB6crl8uHDGXGvICPxcg/exec';
+
+// Repassa ?ref=... e demais parâmetros para o app
+var f = document.getElementById('app');
+f.src = APP_URL + (location.search ? (APP_URL.indexOf('?')>-1?'&':'?') + location.search.slice(1) : '');
+f.addEventListener('load', function(){
+  var s = document.getElementById('splash');
+  s.style.opacity = '0'; setTimeout(function(){ s.style.display='none'; }, 450);
+});
+
+// Service worker (obrigatório para instalar e para push)
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+// Banner de instalação (Android/Chrome)
+var defPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault(); defPrompt = e;
+  if (!matchMedia('(display-mode: standalone)').matches && !localStorage.getItem('instOff'))
+    document.getElementById('instBar').style.display = 'flex';
+});
+document.getElementById('instGo').onclick = function(){
+  if (defPrompt){ defPrompt.prompt(); defPrompt = null; }
+  document.getElementById('instBar').style.display = 'none';
+};
+document.getElementById('instX').onclick = function(){
+  localStorage.setItem('instOff','1');
+  document.getElementById('instBar').style.display = 'none';
+};
+
+// iPhone: mostra instrução (não existe beforeinstallprompt no iOS)
+var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+if (isIOS && !navigator.standalone && !localStorage.getItem('instOff')){
+  var b = document.getElementById('instBar');
+  b.querySelector('span').innerHTML = '<b>Instale o app:</b> toque em Compartilhar <span style="font-size:15px">⎋</span> e depois em "Adicionar à Tela de Início".';
+  document.getElementById('instGo').style.display = 'none';
+  b.style.display = 'flex';
+}
+
+/* ===== PUSH (Firebase Cloud Messaging) =====
+   Fica desligado até você preencher as chaves abaixo.
+   Passo a passo no arquivo LEIA-ME.txt desta pasta. */
+var FIREBASE = {
+  apiKey: '',            // <- do console Firebase
+  projectId: '',
+  messagingSenderId: '',
+  appId: '',
+  vapidKey: ''           // <- Cloud Messaging > Certificados push da Web
+};
+if (FIREBASE.apiKey){
+  var s1=document.createElement('script'); s1.src='https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js';
+  var s2=document.createElement('script'); s2.src='https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js';
+  s1.onload=function(){ document.body.appendChild(s2); };
+  s2.onload=function(){
+    firebase.initializeApp(FIREBASE);
+    var m = firebase.messaging();
+    Notification.requestPermission().then(function(p){
+      if (p!=='granted') return;
+      return navigator.serviceWorker.ready.then(function(reg){
+        return m.getToken({ vapidKey: FIREBASE.vapidKey, serviceWorkerRegistration: reg });
+      });
+    }).then(function(token){
+      if (token) f.contentWindow.postMessage({ tipo:'pushToken', token:token }, '*');
+    }).catch(function(){});
+  };
+  document.body.appendChild(s1);
+}
+</script>
+</body>
+</html>
+
