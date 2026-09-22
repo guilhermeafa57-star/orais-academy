@@ -24,6 +24,10 @@
   #instBar span{flex:1;font-size:13.5px;line-height:1.35}
   #instBar button{background:#4F8E90;color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px}
   #instBar .x{background:transparent;padding:6px;opacity:.7;font-size:16px}
+  #pushBar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:#4F8E90;color:#fff;border-radius:14px;padding:12px 14px;display:none;align-items:center;gap:12px;z-index:10;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  #pushBar span{flex:1;font-size:13.5px;line-height:1.35}
+  #pushBar button{background:#2F5556;color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px}
+  #pushBar .x{background:transparent;padding:6px;opacity:.7;font-size:16px}
 </style>
 </head>
 <body>
@@ -36,6 +40,12 @@
   <span><b>Instale o app</b> na tela inicial para acessar com um toque.</span>
   <button id="instGo">Instalar</button>
   <button class="x" id="instX">✕</button>
+</div>
+
+<div id="pushBar">
+  <span><b>Ativar notificações</b> para saber de missões novas, pontos aprovados e sorteios.</span>
+  <button id="pushGo">Ativar</button>
+  <button class="x" id="pushX">✕</button>
 </div>
 
 <script>
@@ -100,34 +110,63 @@ if (/[?&]diag=1/.test(location.search)){
   document.body.appendChild(d);
 }
 
-/* ===== PUSH (Firebase Cloud Messaging) =====
-   Fica desligado até você preencher as chaves abaixo.
-   Passo a passo no arquivo LEIA-ME.txt desta pasta. */
+/* ===== PUSH (Firebase Cloud Messaging) ===== */
 var FIREBASE = {
-  apiKey: '',            // <- do console Firebase
-  projectId: '',
-  messagingSenderId: '',
-  appId: '',
-  vapidKey: ''           // <- Cloud Messaging > Certificados push da Web
+  apiKey: 'AIzaSyBu80hz2O1FB7Mdp5SvnIVsXCFhMV9AiIg',
+  projectId: 'orais-academy',
+  messagingSenderId: '661117210012',
+  appId: '1:661117210012:web:6487d0c76a177054cd8c59',
+  vapidKey: 'BNctan4Hj_GIEEOJg8K5Ry5C3Fdu9Ok4bVNw1qUxuPdizZEJupvSNApQd6bpy8wMigWxiGMNoEzWu4M2q9SaCR8'
 };
-if (FIREBASE.apiKey){
+var pushBar = document.getElementById('pushBar');
+var pushMsg = null;
+var emStandalone = !!navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+// No iPhone o push só funciona com o app instalado na tela inicial
+var pushPossivel = ('Notification' in window) && ('serviceWorker' in navigator) && (!isIOS || emStandalone);
+
+function entregarToken(){
+  navigator.serviceWorker.ready.then(function(reg){
+    return pushMsg.getToken({ vapidKey: FIREBASE.vapidKey, serviceWorkerRegistration: reg });
+  }).then(function(token){
+    if (!token) return;
+    localStorage.setItem('pushToken', token);
+    f.contentWindow.postMessage({ tipo:'pushToken', token:token }, '*');
+  }).catch(function(e){ console.log('push token', e); });
+}
+function iniciarFirebase(cb){
+  if (window.firebase && firebase.apps && firebase.apps.length){ cb(); return; }
   var s1=document.createElement('script'); s1.src='https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js';
   var s2=document.createElement('script'); s2.src='https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js';
   s1.onload=function(){ document.body.appendChild(s2); };
-  s2.onload=function(){
-    firebase.initializeApp(FIREBASE);
-    var m = firebase.messaging();
-    Notification.requestPermission().then(function(p){
-      if (p!=='granted') return;
-      return navigator.serviceWorker.ready.then(function(reg){
-        return m.getToken({ vapidKey: FIREBASE.vapidKey, serviceWorkerRegistration: reg });
-      });
-    }).then(function(token){
-      if (token) f.contentWindow.postMessage({ tipo:'pushToken', token:token }, '*');
-    }).catch(function(){});
-  };
+  s2.onload=function(){ firebase.initializeApp(FIREBASE); pushMsg = firebase.messaging(); cb(); };
   document.body.appendChild(s1);
 }
+if (FIREBASE.apiKey && pushPossivel){
+  if (Notification.permission === 'granted'){
+    // Já autorizou: renova o token em silêncio toda vez que abre
+    iniciarFirebase(entregarToken);
+  } else if (Notification.permission === 'default' && !localStorage.getItem('pushOff')){
+    // O iOS exige que o pedido venha de um toque do usuário
+    pushBar.style.display = 'flex';
+  }
+}
+document.getElementById('pushGo').onclick = function(){
+  pushBar.style.display = 'none';
+  iniciarFirebase(function(){
+    Notification.requestPermission().then(function(p){ if (p === 'granted') entregarToken(); });
+  });
+};
+document.getElementById('pushX').onclick = function(){
+  localStorage.setItem('pushOff','1');
+  pushBar.style.display = 'none';
+};
+// Quando o app (iframe) terminar o login ele pode pedir o token de novo
+window.addEventListener('message', function(ev){
+  if (ev.data && ev.data.tipo === 'pedirPushToken'){
+    var t = localStorage.getItem('pushToken');
+    if (t) f.contentWindow.postMessage({ tipo:'pushToken', token:t }, '*');
+  }
+});
 </script>
 </body>
 </html>
