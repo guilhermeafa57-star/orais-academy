@@ -8,6 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Orais Academy">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -71,9 +72,32 @@ document.getElementById('instX').onclick = function(){
 var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 if (isIOS && !navigator.standalone && !localStorage.getItem('instOff')){
   var b = document.getElementById('instBar');
-  b.querySelector('span').innerHTML = '<b>Instale o app:</b> toque em Compartilhar <span style="font-size:15px">⎋</span> e depois em "Adicionar à Tela de Início".';
+  b.querySelector('span').innerHTML = '<b>Instale o app:</b> toque na barra de endereço aí embaixo, depois no botão Compartilhar <span style="font-size:15px">⎋</span> e em "Adicionar à Tela de Início".';
   document.getElementById('instGo').style.display = 'none';
   b.style.display = 'flex';
+}
+
+
+// Se o casco foi instalado no endereço antigo (github.io) e agora existe domínio próprio,
+// o iOS abre o app fora do escopo e mostra a barra do Safari. Avisa para reinstalar.
+var DOMINIO = 'academy.orais.com.br';
+if (location.hostname !== DOMINIO && location.hostname.indexOf('github.io') > -1 && (navigator.standalone || matchMedia('(display-mode: standalone)').matches)){
+  var w = document.createElement('div');
+  w.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top,0px));background:#CA5869;color:#fff;border-radius:14px;padding:12px 14px;font-size:13.5px;line-height:1.35;z-index:11;box-shadow:0 6px 20px rgba(0,0,0,.25)';
+  w.innerHTML = '<b>Endereço novo!</b> Apague este ícone e instale de novo em <b>' + DOMINIO + '</b> para o app abrir em tela cheia.';
+  document.body.appendChild(w);
+}
+
+// Diagnóstico: abra com ?diag=1 para ver como o iOS está tratando o app
+if (/[?&]diag=1/.test(location.search)){
+  var d = document.createElement('pre');
+  d.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));background:#1F3839;color:#fff;font-size:12px;padding:10px;border-radius:10px;z-index:12;white-space:pre-wrap';
+  d.textContent = 'host: ' + location.hostname +
+    '\nnavigator.standalone: ' + navigator.standalone +
+    '\ndisplay-mode standalone: ' + matchMedia('(display-mode: standalone)').matches +
+    '\nservice worker: ' + ('serviceWorker' in navigator) +
+    '\nUA: ' + navigator.userAgent;
+  document.body.appendChild(d);
 }
 
 /* ===== PUSH (Firebase Cloud Messaging) =====
@@ -107,4 +131,3 @@ if (FIREBASE.apiKey){
 </script>
 </body>
 </html>
-

@@ -1,5 +1,5 @@
 /* Orais Academy — service worker do shell */
-var CACHE = 'orais-academy-v1';
+var CACHE = 'orais-academy-v2';
 var ASSETS = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -12,9 +12,17 @@ self.addEventListener('activate', function (e) {
   }));
   self.clients.claim();
 });
-// Só o casco fica em cache; o app em si (Apps Script) sempre vem da rede
+// Só o casco fica em cache; o app em si (Apps Script) sempre vem da rede.
+// index.html e manifest: rede primeiro (para atualizações aparecerem), cache só se estiver offline.
 self.addEventListener('fetch', function (e) {
-  if (e.request.url.indexOf(self.location.origin) === 0) {
+  if (e.request.url.indexOf(self.location.origin) !== 0) return;
+  var u = e.request.url;
+  var vivo = e.request.mode === 'navigate' || /index\.html|manifest\.json|\/$/.test(u.split('?')[0]);
+  if (vivo) {
+    e.respondWith(fetch(e.request).then(function (r) {
+      var c = r.clone(); caches.open(CACHE).then(function (k) { k.put(e.request, c); }); return r;
+    }).catch(function () { return caches.match(e.request); }));
+  } else {
     e.respondWith(caches.match(e.request).then(function (r) { return r || fetch(e.request); }));
   }
 });
@@ -37,4 +45,3 @@ self.addEventListener('notificationclick', function (e) {
     return clients.openWindow('./');
   }));
 });
-

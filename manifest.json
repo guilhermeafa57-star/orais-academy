@@ -1,8 +1,9 @@
 {
+  "id": "orais-academy",
   "name": "Orais Academy",
   "short_name": "Orais Academy",
   "description": "Plataforma de embaixadores da Orais Manequins",
-  "start_url": "./",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
