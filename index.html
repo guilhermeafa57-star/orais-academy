@@ -77,6 +77,10 @@ var qs = location.search ? location.search.slice(1) : '';
 var ptSalvo = '';
 try { ptSalvo = localStorage.getItem('pushToken') || ''; } catch(e){}
 if (ptSalvo) qs += (qs ? '&' : '') + 'pt=' + encodeURIComponent(ptSalvo);
+// Sessão lembrada (handle:token) para o app entrar sem pedir senha
+var stSalvo = '';
+try { stSalvo = localStorage.getItem('sessao') || ''; } catch(e){}
+if (stSalvo) qs += (qs ? '&' : '') + 'st=' + encodeURIComponent(stSalvo);
 f.src = APP_URL + (qs ? '?' + qs : '');
 f.addEventListener('load', function(){
   var s = document.getElementById('splash');
@@ -209,8 +213,13 @@ document.getElementById('pushX').onclick = function(){
 };
 // O app se apresenta (window.top.postMessage) e a partir daí temos a referência da janela dele
 window.addEventListener('message', function(ev){
-  if (!ev.data || ev.data.tipo !== 'pedirPushToken') return;
+  if (!ev.data || !ev.data.tipo) return;
   if (!/googleusercontent\.com$|script\.google\.com$/.test(ev.origin.replace(/^https?:\/\//,''))) return;
+  if (ev.data.tipo === 'sessao'){
+    try { if (ev.data.valor) localStorage.setItem('sessao', String(ev.data.valor)); else localStorage.removeItem('sessao'); } catch(e){}
+    return;
+  }
+  if (ev.data.tipo !== 'pedirPushToken') return;
   appWin = ev.source;
   var t = ''; try { t = localStorage.getItem('pushToken') || ''; } catch(e){}
   if (t) mandarTokenAoApp(t);
