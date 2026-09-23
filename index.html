@@ -28,6 +28,15 @@
   #pushBar span{flex:1;font-size:13.5px;line-height:1.35}
   #pushBar button{background:#2F5556;color:#fff;border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px}
   #pushBar .x{background:transparent;padding:6px;opacity:.7;font-size:16px}
+  #pushModal{position:fixed;inset:0;background:rgba(15,28,28,.55);display:none;align-items:flex-end;justify-content:center;z-index:12;padding:0 0 env(safe-area-inset-bottom,0px)}
+  @media(min-width:700px){#pushModal{align-items:center}}
+  #pushModal .box{background:#fff;color:#2A2A2A;width:100%;max-width:440px;border-radius:24px 24px 0 0;padding:26px 22px calc(22px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 30px rgba(0,0,0,.25);text-align:center}
+  @media(min-width:700px){#pushModal .box{border-radius:24px}}
+  #pushModal .sino{width:72px;height:72px;border-radius:50%;background:#F4DDE1;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:34px}
+  #pushModal h2{margin:0 0 8px;font-size:22px;color:#2F5556;letter-spacing:-.01em}
+  #pushModal p{margin:0 0 18px;font-size:15px;line-height:1.45;color:#555}
+  #pushModal .go{width:100%;background:#CA5869;color:#fff;border:0;border-radius:999px;padding:15px;font-size:16px;font-weight:700}
+  #pushModal .later{width:100%;background:transparent;color:#888;border:0;padding:12px;font-size:14px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -37,9 +46,19 @@
 <iframe id="app" allow="camera; clipboard-write" referrerpolicy="no-referrer"></iframe>
 
 <div id="instBar">
-  <span><b>Instale o app</b> na tela inicial para acessar com um toque.</span>
+  <span><b>Instale o app</b> na tela inicial para acessar com um toque. Se o botão não aparecer, toque nos três pontinhos do navegador e em "Adicionar à tela inicial".</span>
   <button id="instGo">Instalar</button>
   <button class="x" id="instX">✕</button>
+</div>
+
+<div id="pushModal">
+  <div class="box">
+    <div class="sino">🔔</div>
+    <h2>Ative as notificações</h2>
+    <p>É por aqui que avisamos dos <b>sorteios da Orais</b>, missões novas e pontos aprovados. Alguns sorteios são por <b>tempo limitado</b>: quem não vê o aviso, perde.</p>
+    <button class="go" id="pushModalGo">Ativar notificações</button>
+    <button class="later" id="pushModalX">Agora não</button>
+  </div>
 </div>
 
 <div id="pushBar">
@@ -53,7 +72,12 @@ var APP_URL = 'https://script.google.com/macros/s/AKfycbwAAa2pzbQQ01NrGDacx0mQLX
 
 // Repassa ?ref=... e demais parâmetros para o app
 var f = document.getElementById('app');
-f.src = APP_URL + (location.search ? (APP_URL.indexOf('?')>-1?'&':'?') + location.search.slice(1) : '');
+var qs = location.search ? location.search.slice(1) : '';
+// Token de push salvo numa abertura anterior vai na URL: o app grava no login
+var ptSalvo = '';
+try { ptSalvo = localStorage.getItem('pushToken') || ''; } catch(e){}
+if (ptSalvo) qs += (qs ? '&' : '') + 'pt=' + encodeURIComponent(ptSalvo);
+f.src = APP_URL + (qs ? '?' + qs : '');
 f.addEventListener('load', function(){
   var s = document.getElementById('splash');
   s.style.opacity = '0'; setTimeout(function(){ s.style.display='none'; }, 450);
@@ -82,7 +106,7 @@ document.getElementById('instX').onclick = function(){
 var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 if (isIOS && !navigator.standalone && !localStorage.getItem('instOff')){
   var b = document.getElementById('instBar');
-  b.querySelector('span').innerHTML = '<b>Instale o app:</b> toque na barra de endereço aí embaixo, depois no botão Compartilhar <span style="font-size:15px">⎋</span> e em "Adicionar à Tela de Início".';
+  b.querySelector('span').innerHTML = '<b>Instale o app:</b> toque no ícone ao lado do endereço aí embaixo (parece uma pecinha de quebra-cabeça), depois em Compartilhar <span style="font-size:15px">⎋</span> e em "Adicionar à Tela de Início".';
   document.getElementById('instGo').style.display = 'none';
   b.style.display = 'flex';
 }
@@ -129,8 +153,8 @@ function entregarToken(){
     return pushMsg.getToken({ vapidKey: FIREBASE.vapidKey, serviceWorkerRegistration: reg });
   }).then(function(token){
     if (!token) return;
-    localStorage.setItem('pushToken', token);
-    f.contentWindow.postMessage({ tipo:'pushToken', token:token }, '*');
+    try { localStorage.setItem('pushToken', token); } catch(e){}
+    mandarTokenAoApp(token);
   }).catch(function(e){ console.log('push token', e); });
 }
 function iniciarFirebase(cb){
@@ -141,31 +165,55 @@ function iniciarFirebase(cb){
   s2.onload=function(){ firebase.initializeApp(FIREBASE); pushMsg = firebase.messaging(); cb(); };
   document.body.appendChild(s1);
 }
+var appWin = null; // janela interna do app (o Apps Script empilha iframes; só dá para falar com ela quando ela se apresenta)
+function mandarTokenAoApp(token){
+  if (appWin){ try { appWin.postMessage({ tipo:'pushToken', token:token }, '*'); } catch(e){} }
+}
+function pedirPermissao(){
+  iniciarFirebase(function(){
+    Notification.requestPermission().then(function(p){ if (p === 'granted') entregarToken(); });
+  });
+}
+var pushModal = document.getElementById('pushModal');
 if (FIREBASE.apiKey && pushPossivel){
   if (Notification.permission === 'granted'){
     // Já autorizou: renova o token em silêncio toda vez que abre
     iniciarFirebase(entregarToken);
   } else if (Notification.permission === 'default' && !localStorage.getItem('pushOff')){
-    // O iOS exige que o pedido venha de um toque do usuário
-    pushBar.style.display = 'flex';
+    // O iOS exige que o pedido venha de um toque do usuário.
+    // Primeira abertura: modal chamativo. Depois: barra discreta.
+    if (!localStorage.getItem('pushModalVisto')){
+      f.addEventListener('load', function(){ setTimeout(function(){ pushModal.style.display = 'flex'; }, 1200); });
+    } else {
+      pushBar.style.display = 'flex';
+    }
   }
 }
+document.getElementById('pushModalGo').onclick = function(){
+  localStorage.setItem('pushModalVisto','1');
+  pushModal.style.display = 'none';
+  pedirPermissao();
+};
+document.getElementById('pushModalX').onclick = function(){
+  localStorage.setItem('pushModalVisto','1');
+  pushModal.style.display = 'none';
+  pushBar.style.display = 'flex';
+};
 document.getElementById('pushGo').onclick = function(){
   pushBar.style.display = 'none';
-  iniciarFirebase(function(){
-    Notification.requestPermission().then(function(p){ if (p === 'granted') entregarToken(); });
-  });
+  pedirPermissao();
 };
 document.getElementById('pushX').onclick = function(){
   localStorage.setItem('pushOff','1');
   pushBar.style.display = 'none';
 };
-// Quando o app (iframe) terminar o login ele pode pedir o token de novo
+// O app se apresenta (window.top.postMessage) e a partir daí temos a referência da janela dele
 window.addEventListener('message', function(ev){
-  if (ev.data && ev.data.tipo === 'pedirPushToken'){
-    var t = localStorage.getItem('pushToken');
-    if (t) f.contentWindow.postMessage({ tipo:'pushToken', token:t }, '*');
-  }
+  if (!ev.data || ev.data.tipo !== 'pedirPushToken') return;
+  if (!/googleusercontent\.com$|script\.google\.com$/.test(ev.origin.replace(/^https?:\/\//,''))) return;
+  appWin = ev.source;
+  var t = ''; try { t = localStorage.getItem('pushToken') || ''; } catch(e){}
+  if (t) mandarTokenAoApp(t);
 });
 </script>
 </body>
